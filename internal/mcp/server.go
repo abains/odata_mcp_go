@@ -29,6 +29,7 @@ type Request struct {
 	ID      interface{}            `json:"id"`
 	Method  string                 `json:"method"`
 	Params  map[string]interface{} `json:"params,omitempty"`
+	ctx     context.Context        // Request context from transport (not serialized)
 }
 
 // Server represents an MCP server
@@ -60,7 +61,7 @@ func NewServer(name, version string) *Server {
 		toolOrder:       make([]string, 0),
 		handlers:        make(map[string]ToolHandler),
 		ctx:             ctx,
-		cancel:    cancel,
+		cancel:          cancel,
 	}
 }
 
@@ -145,6 +146,7 @@ func (s *Server) HandleMessage(ctx context.Context, msg *transport.Message) (*tr
 		JSONRPC: msg.JSONRPC,
 		ID:      msg.ID,
 		Method:  msg.Method,
+		ctx:     ctx, // Store the request context for passing to handlers
 	}
 
 	// Parse params if present
@@ -323,7 +325,14 @@ func (s *Server) handleToolsCallV2(req *Request) (*transport.Message, error) {
 		return s.createErrorResponse(req.ID, -32602, "Invalid params", fmt.Sprintf("Tool not found: %s", name)), nil
 	}
 
-	result, err := handler(s.ctx, params)
+	// Use request context (from HTTP request) instead of server context to preserve headers
+	handlerCtx := req.ctx
+	if handlerCtx == nil {
+		// Fallback to server context if no request context available (e.g., stdio transport)
+		handlerCtx = s.ctx
+	}
+
+	result, err := handler(handlerCtx, params)
 	if err != nil {
 		// Map OData errors to appropriate MCP error codes and provide detailed context
 		errorCode, errorMessage, errorData := s.categorizeError(err, name)

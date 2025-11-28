@@ -17,6 +17,11 @@ import (
 	"github.com/zmcp/odata-mcp/internal/models"
 )
 
+// Context key for HTTP headers passed from MCP server
+type contextKey string
+
+const HTTPHeadersContextKey contextKey = "mcp-http-headers"
+
 // ODataClient handles HTTP communication with OData services
 type ODataClient struct {
 	baseURL        string
@@ -83,9 +88,31 @@ func (c *ODataClient) buildRequest(ctx context.Context, method, endpoint string,
 		req.Header.Set(constants.Accept, constants.ContentTypeJSON)
 	}
 
-	// Set authentication
+	// Apply headers from context (from MCP HTTP connection) - do this BEFORE config-based auth
+	// This allows dynamic headers from MCP connection to be used
+	if headers, ok := ctx.Value(HTTPHeadersContextKey).(http.Header); ok {
+		var headerCount int
+		for key, values := range headers {
+			// Skip headers that shouldn't be forwarded
+			if shouldForwardHeader(key) {
+				for _, value := range values {
+					req.Header.Add(key, value)
+					headerCount++
+				}
+			}
+		}
+		if c.verbose && headerCount > 0 {
+			fmt.Fprintf(os.Stderr, "[VERBOSE] Applied %d header(s) from MCP context\n", headerCount)
+		}
+	}
+
+	// Set authentication from configuration (will override context headers if both exist)
+	// This maintains backward compatibility with existing config-based auth
 	if c.username != "" && c.password != "" {
 		req.SetBasicAuth(c.username, c.password)
+		if c.verbose {
+			fmt.Fprintf(os.Stderr, "[VERBOSE] Using configured basic auth\n")
+		}
 	}
 
 	// Set cookies
@@ -277,6 +304,48 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// function that determines if a header should be forwarded from MCP to OData service
+func shouldForwardHeader(headerName string) bool {
+	// Normalize to lowercase for comparison
+	lower := strings.ToLower(headerName)
+
+	// Allow authentication headers
+	if lower == "authorization" || lower == "cookie" {
+		return true
+	}
+
+	// Allow custom headers (X- prefix)
+	if strings.HasPrefix(lower, "x-") {
+		return true
+	}
+
+	// Block hop-by-hop headers and other problematic headers
+	blockedHeaders := []string{
+		"host",
+		"connection",
+		"keep-alive",
+		"transfer-encoding",
+		"upgrade",
+		"proxy-authenticate",
+		"proxy-authorization",
+		"te",
+		"trailer",
+		"content-length", // Will be set by http.Client
+		"content-type",   // Set by specific methods
+		"accept",         // Set by buildRequest
+		"user-agent",     // Set by buildRequest
+	}
+
+	for _, blocked := range blockedHeaders {
+		if lower == blocked {
+			return false
+		}
+	}
+
+	// Allow other headers by default
+	return true
 }
 
 // GetMetadata fetches and parses the OData service metadata

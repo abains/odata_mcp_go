@@ -121,6 +121,9 @@ func init() {
 	// Protocol version override (for AI Foundry compatibility)
 	rootCmd.Flags().StringVar(&cfg.ProtocolVersion, "protocol-version", "", "Override MCP protocol version (e.g., '2025-06-18' for AI Foundry)")
 
+	// Header forwarding (HTTP transport only)
+	rootCmd.Flags().BoolVar(&cfg.ForwardMCPHeaders, "forward-mcp-headers", false, "Forward HTTP headers from MCP connection to OData service (Streamable HTTP transport only)")
+
 	// Bind flags to viper for environment variable support
 	viper.BindPFlag("service", rootCmd.Flags().Lookup("service"))
 	viper.BindPFlag("username", rootCmd.Flags().Lookup("user"))
@@ -306,8 +309,11 @@ func runBridge(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(os.Stderr, "[VERBOSE] Starting Streamable HTTP transport (protocol 2024-11-05) on %s\n", httpAddr)
 			fmt.Fprintf(os.Stderr, "[VERBOSE] Main endpoint: http://%s/mcp\n", httpAddr)
 			fmt.Fprintf(os.Stderr, "[VERBOSE] Health endpoint: http://%s/health\n", httpAddr)
+			if cfg.ForwardMCPHeaders {
+				fmt.Fprintf(os.Stderr, "[VERBOSE] Header forwarding enabled - HTTP headers will be passed to OData service\n")
+			}
 		}
-		trans = http.NewStreamableHTTP(httpAddr, handler, expertMode)
+		trans = http.NewStreamableHTTP(httpAddr, handler, expertMode, cfg.ForwardMCPHeaders)
 	case "http", "sse":
 		httpAddr, _ := cmd.Flags().GetString("http-addr")
 		expertMode, _ := cmd.Flags().GetBool("i-am-security-expert-i-know-what-i-am-doing")

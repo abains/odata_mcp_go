@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zmcp/odata-mcp/internal/client"
 	"github.com/zmcp/odata-mcp/internal/transport"
 )
 
@@ -23,6 +24,7 @@ type StreamableHTTPTransport struct {
 	mu             sync.RWMutex
 	activeStreams  map[string]*streamContext
 	enableSecurity bool
+	forwardHeaders bool // Whether to forward HTTP headers to OData client
 }
 
 type streamContext struct {
@@ -34,12 +36,13 @@ type streamContext struct {
 }
 
 // NewStreamableHTTP creates a new Streamable HTTP transport
-func NewStreamableHTTP(addr string, handler transport.Handler, enableSecurity bool) *StreamableHTTPTransport {
+func NewStreamableHTTP(addr string, handler transport.Handler, enableSecurity bool, forwardHeaders bool) *StreamableHTTPTransport {
 	return &StreamableHTTPTransport{
 		addr:           addr,
 		handler:        handler,
 		activeStreams:  make(map[string]*streamContext),
 		enableSecurity: enableSecurity,
+		forwardHeaders: forwardHeaders,
 	}
 }
 
@@ -95,7 +98,7 @@ func (t *StreamableHTTPTransport) addSecurityHeaders(next http.Handler) http.Han
 		// Add security headers
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
-		
+
 		// CORS headers for local development
 		if isLocalhost(r.Host) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -130,8 +133,15 @@ func (t *StreamableHTTPTransport) handleMCP(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Process the message
+	// Enrich context with HTTP headers for forwarding to OData service (if enabled)
 	ctx := r.Context()
+	if t.forwardHeaders {
+		// Clone headers to avoid any modification issues
+		headers := r.Header.Clone()
+		ctx = context.WithValue(ctx, client.HTTPHeadersContextKey, headers)
+	}
+
+	// Process the message with enriched context
 	response, err := t.handler(ctx, &msg)
 	if err != nil {
 		response = &transport.Message{
@@ -163,7 +173,7 @@ func (t *StreamableHTTPTransport) handleMCP(w http.ResponseWriter, r *http.Reque
 func (t *StreamableHTTPTransport) shouldUpgradeToStream(request, response *transport.Message) bool {
 	// Check if the response indicates streaming would be beneficial
 	// This could be based on response size, method type, or explicit flags
-	
+
 	// For now, check if it's a method that typically streams
 	streamingMethods := []string{
 		"tools/call",
@@ -279,7 +289,7 @@ func (t *StreamableHTTPTransport) sendSSEMessage(stream *streamContext, eventTyp
 	eventID := fmt.Sprintf("%s-%d", stream.id, time.Now().UnixNano())
 
 	// Send SSE formatted message
-	_, err = fmt.Fprintf(stream.writer, "id: %s\nevent: %s\ndata: %s\n\n", 
+	_, err = fmt.Fprintf(stream.writer, "id: %s\nevent: %s\ndata: %s\n\n",
 		eventID, eventType, jsonData)
 	if err != nil {
 		return err

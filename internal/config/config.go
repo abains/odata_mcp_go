@@ -66,6 +66,9 @@ type Config struct {
 
 	// Protocol version override (for AI Foundry compatibility)
 	ProtocolVersion string `mapstructure:"protocol_version"` // Override MCP protocol version (default: 2024-11-05)
+
+	// Header forwarding (HTTP transport only)
+	ForwardMCPHeaders bool `mapstructure:"forward_mcp_headers"` // Forward HTTP headers from MCP connection to OData service
 }
 
 // HasBasicAuth returns true if username and password are configured
