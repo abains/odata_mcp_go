@@ -4,9 +4,20 @@ A Go implementation of the OData to Model Context Protocol (MCP) bridge, providi
 
 This is a Go port of the Python OData-MCP bridge implementation, designed to be easier to run on different operating systems with better performance and simpler deployment. It supports both OData v2 and v4 services.
 
-## 🆕 What's New (v1.5.1)
+## 🆕 What's New (v1.6.0)
 
-- **AI Foundry Compatibility**: Full support for AI Foundry's MCP client
+- **Universal Tool Mode** (Issue #14): Single tool instead of N tools per entity
+  - Reduces tool count by 95-99% for large services (e.g., 485 tools → 1 tool)
+  - Reduces context usage by 96-98% (~37,000 tokens → ~900 tokens)
+  - Enable with `--universal` flag
+  - Solves "context rot" issue where LLMs fail with too many tools
+  - See [Universal Tool Architecture](docs/008-issue-14-universal-tool-architecture.md)
+
+- **Search Capability Fix** (Issue #18): Conservative $search detection
+  - Only enables search tools when service explicitly declares support
+  - Prevents timeouts on services that don't implement $search
+
+- **AI Foundry Compatibility** (v1.5.1): Full support for AI Foundry's MCP client
   - Configurable protocol version with `--protocol-version` flag
   - Support for protocol version `2025-06-18` (AI Foundry)
   - Maintains backward compatibility with Claude (default: `2024-11-05`)
@@ -559,6 +570,37 @@ Fine-grained control over which operation types are available. Operation types a
 
 Note: `--enable` and `--disable` cannot be used together.
 
+### Universal Tool Mode
+
+For large OData services with many entities, the standard per-entity tool generation can create hundreds of tools, causing:
+- **Context rot**: LLMs struggle to reason when tool count exceeds ~128
+- **High token usage**: Tool schemas can consume 15,000-40,000 tokens
+- **Tool selection failures**: LLMs may report "no API available"
+
+Universal mode solves this by generating a single tool that handles all operations:
+
+```bash
+# Enable universal tool mode
+./odata-mcp --universal https://my-service.com/odata/
+
+# Compare tool counts
+./odata-mcp --trace https://my-service.com/odata/           # Standard: many tools
+./odata-mcp --universal --trace https://my-service.com/odata/  # Universal: 1 tool
+```
+
+**When to use universal mode:**
+- Service has more than ~50 entity sets
+- Using multiple OData services simultaneously
+- Experiencing "no API available" errors with large services
+
+**Universal tool usage:**
+```json
+{"action": "list", "target": "Products", "params": {"filter": "Price gt 100", "top": 10}}
+{"action": "get", "target": "Products", "params": {"key": {"ProductID": 1}}}
+{"action": "create", "target": "Orders", "params": {"data": {"CustomerID": "C001"}}}
+{"action": "call", "target": "ReleaseOrder", "params": {"OrderID": "O001"}}
+```
+
 ### Debugging and Inspection
 
 ```bash
@@ -638,6 +680,7 @@ The OData MCP bridge includes a flexible hint system to provide guidance for ser
 | `--verbose-errors` | Provide detailed error context | `false` |
 | `--claude-code-friendly, -c` | Remove $ prefix from OData parameters for Claude Code CLI compatibility | `false` |
 | `--protocol-version` | Override MCP protocol version (e.g., '2025-06-18' for AI Foundry) | `2024-11-05` |
+| `--universal` | Use single universal OData tool instead of per-entity tools (reduces context for large services) | `false` |
 
 ### Environment Variables
 

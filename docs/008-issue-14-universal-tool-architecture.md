@@ -4,7 +4,7 @@
 **Document ID:** 008
 **Subject:** Solving tool explosion with single universal tool pattern
 **Related:** GitHub Issue #14, vsp handlers_universal.go
-**Status:** PROPOSED
+**Status:** ✅ IMPLEMENTED
 
 ---
 
@@ -237,21 +237,28 @@ func (b *ODataMCPBridge) handleUniversalTool(ctx context.Context, req mcp.CallTo
 | Validation | MCP schema level | Application level |
 | Scalability | Limited by LLM | Unlimited |
 
+### Measured Results (2026-01-31)
+
+| Service | Standard Mode | Universal Mode | Tool Reduction | Token Reduction |
+|---------|---------------|----------------|----------------|-----------------|
+| SAP GWSAMPLE_BASIC | 68 tools, ~16,287 tokens | 1 tool, ~765 tokens | 98.5% | 96% |
+| Northwind v2 (26 entities) | 157 tools, ~37,260 tokens | 1 tool, ~912 tokens | 99.4% | 98% |
+
 ---
 
 ## Migration Path
 
-### Phase 1: Add Universal Mode (non-breaking)
+### Phase 1: Add Universal Mode (non-breaking) ✅ IMPLEMENTED
 
 ```bash
-# Current behavior (default)
+# Current behavior (default) - multi-tool mode
 odata-mcp --service https://...
 
-# New universal mode
+# New universal mode (opt-in)
 odata-mcp --universal --service https://...
 ```
 
-### Phase 2: Make Universal Default
+### Phase 2: Make Universal Default (Future)
 
 ```bash
 # Universal (default)
@@ -261,7 +268,7 @@ odata-mcp --service https://...
 odata-mcp --legacy-tools --service https://...
 ```
 
-### Phase 3: Deprecate Multi-Tool
+### Phase 3: Deprecate Multi-Tool (Future)
 
 Remove `--legacy-tools` after migration period.
 
@@ -269,13 +276,15 @@ Remove `--legacy-tools` after migration period.
 
 ## Implementation Checklist
 
-- [ ] Add `--universal` flag to config
-- [ ] Create `generateUniversalDescription()` function
-- [ ] Create `handleUniversalTool()` router
-- [ ] Reuse existing handlers (handleList, handleGet, etc.)
-- [ ] Add params validation per action
-- [ ] Update tests
-- [ ] Update documentation
+- [x] Add `--universal` flag to config (`internal/config/config.go`)
+- [x] Create `generateUniversalDescription()` function (`internal/bridge/handlers_universal.go`)
+- [x] Create `handleUniversalTool()` router (`internal/bridge/handlers_universal.go`)
+- [x] Reuse existing handlers (handleEntityFilter, handleEntityGet, etc.)
+- [x] Add params validation per action
+- [x] Update tests (`internal/bridge/bridge_test.go`)
+- [x] Update documentation
+
+**Status:** ✅ IMPLEMENTED (2026-01-31)
 
 ---
 

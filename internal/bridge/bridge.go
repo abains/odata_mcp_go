@@ -114,6 +114,16 @@ func (b *ODataMCPBridge) initialize() error {
 
 // generateTools creates MCP tools based on metadata
 func (b *ODataMCPBridge) generateTools() error {
+	// Check if universal tool mode is enabled
+	if b.config.UniversalTool {
+		if b.config.Verbose {
+			fmt.Fprintf(os.Stderr, "[VERBOSE] Using universal tool mode (single tool instead of per-entity tools)\n")
+		}
+		b.generateUniversalTool()
+		return nil
+	}
+
+	// Standard multi-tool mode
 	// 1. Generate service info tool first
 	b.generateServiceInfoTool()
 
