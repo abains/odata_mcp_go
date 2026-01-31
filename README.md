@@ -377,18 +377,14 @@ The OData MCP bridge supports two transport mechanisms:
 1. **STDIO (default)** - Standard input/output communication, used by Claude Desktop
 2. **HTTP/SSE** - HTTP server with Server-Sent Events for web-based clients
 
-> 🔒 **SECURITY WARNING**: The HTTP/SSE transport has **NO AUTHENTICATION** - anyone who can connect can access your OData service!
-> 
-> **By default, HTTP transport is restricted to localhost only for security.**
-> 
-> Safer usage scenarios:
-> - Local development (localhost only) - **DEFAULT & RECOMMENDED**
-> - Behind a reverse proxy with authentication
-> - Private networks with proper firewall rules (requires expert flag)
-> 
-> **NEVER expose the HTTP transport to the internet without additional security measures!**
-> 
-> 🤖 **REMEMBER**: Skynet happened because open MCP-SSE ports were exposed to the internet with sudo rights. Protect the planet, protect humanity - do not use SSE/HTTP transport until it becomes more mature from a security perspective.
+> 🔒 **SECURITY MODEL**: HTTP transport uses a strict security model.
+>
+> **Security Requirements:**
+> - **Localhost**: Token required (`--mcp-token`)
+> - **Non-localhost**: Token + TLS required, no exceptions
+> - **All interfaces (0.0.0.0/::)**: Requires `--allow-all-interfaces` + token + TLS
+>
+> Token can be any string - for dev, `--mcp-token dev` works fine.
 
 #### Using Streamable HTTP Transport (Modern MCP Protocol)
 
@@ -411,20 +407,21 @@ Streamable HTTP endpoints:
 
 ```bash
 # Start server on localhost (default: localhost:8080)
-./odata-mcp --transport http https://services.odata.org/V2/Northwind/Northwind.svc/
+./odata-mcp --transport http --mcp-token "dev" https://services.odata.org/V2/Northwind/Northwind.svc/
 
 # Use custom localhost port
-./odata-mcp --transport http --http-addr localhost:3000 https://services.odata.org/V2/Northwind/Northwind.svc/
+./odata-mcp --transport http --http-addr localhost:3000 --mcp-token "dev" https://services.odata.org/V2/Northwind/Northwind.svc/
 
-# IPv4 localhost
-./odata-mcp --transport http --http-addr 127.0.0.1:8080 https://services.odata.org/V2/Northwind/Northwind.svc/
+# Non-localhost requires token + TLS
+./odata-mcp --transport http --http-addr 192.168.1.100:8080 \
+  --mcp-token "my-secret-token" --tls --tls-cert cert.pem --tls-key key.pem \
+  https://services.odata.org/V2/Northwind/Northwind.svc/
 
-# IPv6 localhost  
-./odata-mcp --transport http --http-addr [::1]:8080 https://services.odata.org/V2/Northwind/Northwind.svc/
-
-# ⚠️ DANGEROUS: Expose to network (NOT RECOMMENDED!)
-# Only use if you understand the security implications
-./odata-mcp --transport http --http-addr 0.0.0.0:8080 --i-am-security-expert-i-know-what-i-am-doing https://services.odata.org/V2/Northwind/Northwind.svc/
+# All interfaces requires explicit flag + token + TLS
+./odata-mcp --transport http --http-addr 0.0.0.0:8080 \
+  --allow-all-interfaces --mcp-token "my-secret-token" \
+  --tls --tls-cert cert.pem --tls-key key.pem \
+  https://services.odata.org/V2/Northwind/Northwind.svc/
 ```
 
 Legacy HTTP/SSE endpoints:
@@ -625,7 +622,12 @@ The OData MCP bridge includes a flexible hint system to provide guidance for ser
 | `--hint` | Direct hint JSON or text from CLI | |
 | `--transport` | Transport type: 'stdio', 'http' (SSE), or 'streamable-http' | `stdio` |
 | `--http-addr` | HTTP server address (with --transport http/streamable-http) | `localhost:8080` |
-| `--i-am-security-expert-i-know-what-i-am-doing` | DANGEROUS: Allow non-localhost HTTP transport | `false` |
+| `--mcp-token` | Authentication token for HTTP transport (required) | |
+| `--mcp-token-file` | Path to file containing authentication token | |
+| `--tls` | Enable TLS for HTTP transport | `false` |
+| `--tls-cert` | Path to TLS certificate file | |
+| `--tls-key` | Path to TLS key file | |
+| `--allow-all-interfaces` | Allow binding to 0.0.0.0/:: (requires --mcp-token and --tls) | `false` |
 | `--legacy-dates` | Enable legacy date format conversion | `true` |
 | `--no-legacy-dates` | Disable legacy date format conversion | `false` |
 | `--convert-dates-from-sap` | Convert SAP date formats in responses | `false` |
