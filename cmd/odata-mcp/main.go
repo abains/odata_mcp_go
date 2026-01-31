@@ -128,8 +128,8 @@ func init() {
 	// Protocol version override (for AI Foundry compatibility)
 	rootCmd.Flags().StringVar(&cfg.ProtocolVersion, "protocol-version", "", "Override MCP protocol version (e.g., '2025-06-18' for AI Foundry)")
 
-	// Universal tool mode (single tool instead of N tools per entity)
-	rootCmd.Flags().BoolVar(&cfg.UniversalTool, "universal", false, "Use single universal OData tool instead of per-entity tools (reduces tool count for large services)")
+	// Universal tool mode (single tool instead of N tools per entity) - DEFAULT since v0.2
+	rootCmd.Flags().BoolVar(&cfg.UniversalTool, "universal", true, "Use single universal OData tool (default: true, use --universal=false for legacy per-entity tools)")
 
 	// Bind flags to viper for environment variable support
 	_ = viper.BindPFlag("service", rootCmd.Flags().Lookup("service"))
