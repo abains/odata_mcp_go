@@ -6,31 +6,77 @@ This is a Go port of the Python OData-MCP bridge implementation, designed to be 
 
 ## 🆕 What's New (v1.6.0)
 
-- **Universal Tool Mode** (Issue #14): Single tool instead of N tools per entity
-  - Reduces tool count by 95-99% for large services (e.g., 485 tools → 1 tool)
-  - Reduces context usage by 96-98% (~37,000 tokens → ~900 tokens)
-  - Enable with `--universal` flag
-  - Solves "context rot" issue where LLMs fail with too many tools
-  - See [Universal Tool Architecture](docs/008-issue-14-universal-tool-architecture.md)
+### Universal Tool Mode — One Tool to Rule Them All
 
-- **Search Capability Fix** (Issue #18): Conservative $search detection
-  - Only enables search tools when service explicitly declares support
-  - Prevents timeouts on services that don't implement $search
+The biggest addition is **Universal Tool Mode** (`--universal`), a game-changer for large OData services:
 
-- **AI Foundry Compatibility** (v1.5.1): Full support for AI Foundry's MCP client
-  - Configurable protocol version with `--protocol-version` flag
-  - Support for protocol version `2025-06-18` (AI Foundry)
-  - Maintains backward compatibility with Claude (default: `2024-11-05`)
-  - See [AI Foundry Compatibility Guide](AI_FOUNDRY_COMPATIBILITY.md) for details
+```bash
+# Before: 485 tools, ~37,000 tokens, Claude says "no API available"
+./odata-mcp https://large-sap-service.com/odata/
 
-- **SAP GUID Filtering** (v1.5.0): Automatic formatting of GUID values for SAP OData services
-  - Transforms `'uuid'` to `guid'uuid'` format automatically
-  - No configuration needed - automatic SAP service detection
+# After: 1 tool, ~900 tokens, works perfectly
+./odata-mcp --universal https://large-sap-service.com/odata/
+```
 
-- **Streamable HTTP Transport** (v1.5.0): Modern MCP protocol support with `--transport streamable-http`
-  - Single `/mcp` endpoint with automatic SSE upgrade
-  - Bidirectional communication and session management
-  - Better alignment with Python MCP ecosystem
+| Metric | Standard Mode | Universal Mode | Reduction |
+|--------|---------------|----------------|-----------|
+| Tools (Northwind) | 157 | 1 | 99.4% |
+| Tools (SAP BP) | 485 | 1 | 99.8% |
+| Token usage | ~37,000 | ~900 | 97.6% |
+
+**Why is it opt-in?** Universal mode changes how you interact with OData:
+- Standard mode: Each entity gets dedicated tools (`filter_Products`, `get_Orders`, etc.)
+- Universal mode: One `odata` tool with `action`, `target`, and `params`
+
+We made it opt-in because:
+1. **Backward compatibility** — existing configs and workflows continue working
+2. **Discoverability** — per-entity tools are self-documenting; LLMs can see exactly what's available
+3. **Simplicity for small services** — if you have 20 tools, per-entity mode works great
+4. **Explicit choice** — users should consciously choose the trade-off
+
+**When to use `--universal`:**
+- Service has 50+ entity sets
+- Running multiple OData services simultaneously
+- Experiencing "no API available" or tool selection failures
+- Want minimal token footprint
+
+See [Universal Tool Architecture](docs/008-issue-14-universal-tool-architecture.md) for the full story.
+
+### MCP Header Forwarding
+
+New `--forward-mcp-headers` flag enables passing HTTP headers from MCP clients to OData services:
+
+```bash
+./odata-mcp --transport streamable-http --forward-mcp-headers https://secured-service.com/odata/
+```
+
+This enables:
+- **Dynamic authentication** — pass credentials per-request instead of at startup
+- **Multi-tenant scenarios** — different users with different tokens
+- **Custom headers** — `X-*` headers flow through to OData
+
+### Issue Fixes Bonanza
+
+This release fixes 10 open issues:
+
+| Issue | Problem | Fix |
+|-------|---------|-----|
+| #12 | SAP OData shows no tools | Fixed XML namespace parsing (`sap:creatable` etc.) |
+| #13 | `--max-items 99999` crashes | Added validation (max 10,000) |
+| #14 | Multiple services = Claude stuck | Universal tool mode |
+| #16 | GUID formatting wrong | Auto-detect SAP, add `guid'...'` prefix |
+| #17 | Timeout instead of error | Immediate error response |
+| #18 | Wildcard search fails | Parse `SearchRestrictions` annotation |
+| #19 | Timeout hides SAP error | Return actual error message |
+| #22 | BaseType not exposed | Added to EntityType model |
+| #23 | Header handling | `--forward-mcp-headers` flag |
+| #25 | Windows build no .exe | Fixed Makefile for Windows |
+
+### Previous Releases
+
+- **AI Foundry Compatibility** (v1.5.1): `--protocol-version` flag for AI Foundry's `2025-06-18` protocol
+- **SAP GUID Filtering** (v1.5.0): Automatic `guid'...'` formatting for SAP services
+- **Streamable HTTP Transport** (v1.5.0): Modern MCP protocol with `--transport streamable-http`
 
 ## Features
 
@@ -680,6 +726,7 @@ The OData MCP bridge includes a flexible hint system to provide guidance for ser
 | `--verbose-errors` | Provide detailed error context | `false` |
 | `--claude-code-friendly, -c` | Remove $ prefix from OData parameters for Claude Code CLI compatibility | `false` |
 | `--protocol-version` | Override MCP protocol version (e.g., '2025-06-18' for AI Foundry) | `2024-11-05` |
+| `--forward-mcp-headers` | Forward HTTP headers from MCP connection to OData service (Streamable HTTP only) | `false` |
 | `--universal` | Use single universal OData tool instead of per-entity tools (reduces context for large services) | `false` |
 
 ### Environment Variables
