@@ -4,9 +4,20 @@ A Go implementation of the OData to Model Context Protocol (MCP) bridge, providi
 
 This is a Go port of the Python OData-MCP bridge implementation, designed to be easier to run on different operating systems with better performance and simpler deployment. It supports both OData v2 and v4 services.
 
-## 🆕 What's New (v1.5.1)
+## 🆕 What's New (v1.6.0)
 
-- **AI Foundry Compatibility**: Full support for AI Foundry's MCP client
+- **Universal Tool Mode** (Issue #14): Single tool instead of N tools per entity
+  - Reduces tool count by 95-99% for large services (e.g., 485 tools → 1 tool)
+  - Reduces context usage by 96-98% (~37,000 tokens → ~900 tokens)
+  - Enable with `--universal` flag
+  - Solves "context rot" issue where LLMs fail with too many tools
+  - See [Universal Tool Architecture](docs/008-issue-14-universal-tool-architecture.md)
+
+- **Search Capability Fix** (Issue #18): Conservative $search detection
+  - Only enables search tools when service explicitly declares support
+  - Prevents timeouts on services that don't implement $search
+
+- **AI Foundry Compatibility** (v1.5.1): Full support for AI Foundry's MCP client
   - Configurable protocol version with `--protocol-version` flag
   - Support for protocol version `2025-06-18` (AI Foundry)
   - Maintains backward compatibility with Claude (default: `2024-11-05`)
@@ -377,18 +388,14 @@ The OData MCP bridge supports two transport mechanisms:
 1. **STDIO (default)** - Standard input/output communication, used by Claude Desktop
 2. **HTTP/SSE** - HTTP server with Server-Sent Events for web-based clients
 
-> 🔒 **SECURITY WARNING**: The HTTP/SSE transport has **NO AUTHENTICATION** - anyone who can connect can access your OData service!
-> 
-> **By default, HTTP transport is restricted to localhost only for security.**
-> 
-> Safer usage scenarios:
-> - Local development (localhost only) - **DEFAULT & RECOMMENDED**
-> - Behind a reverse proxy with authentication
-> - Private networks with proper firewall rules (requires expert flag)
-> 
-> **NEVER expose the HTTP transport to the internet without additional security measures!**
-> 
-> 🤖 **REMEMBER**: Skynet happened because open MCP-SSE ports were exposed to the internet with sudo rights. Protect the planet, protect humanity - do not use SSE/HTTP transport until it becomes more mature from a security perspective.
+> 🔒 **SECURITY MODEL**: HTTP transport uses a strict security model.
+>
+> **Security Requirements:**
+> - **Localhost**: Token required (`--mcp-token`)
+> - **Non-localhost**: Token + TLS required, no exceptions
+> - **All interfaces (0.0.0.0/::)**: Requires `--allow-all-interfaces` + token + TLS
+>
+> Token can be any string - for dev, `--mcp-token dev` works fine.
 
 #### Using Streamable HTTP Transport (Modern MCP Protocol)
 
@@ -411,20 +418,21 @@ Streamable HTTP endpoints:
 
 ```bash
 # Start server on localhost (default: localhost:8080)
-./odata-mcp --transport http https://services.odata.org/V2/Northwind/Northwind.svc/
+./odata-mcp --transport http --mcp-token "dev" https://services.odata.org/V2/Northwind/Northwind.svc/
 
 # Use custom localhost port
-./odata-mcp --transport http --http-addr localhost:3000 https://services.odata.org/V2/Northwind/Northwind.svc/
+./odata-mcp --transport http --http-addr localhost:3000 --mcp-token "dev" https://services.odata.org/V2/Northwind/Northwind.svc/
 
-# IPv4 localhost
-./odata-mcp --transport http --http-addr 127.0.0.1:8080 https://services.odata.org/V2/Northwind/Northwind.svc/
+# Non-localhost requires token + TLS
+./odata-mcp --transport http --http-addr 192.168.1.100:8080 \
+  --mcp-token "my-secret-token" --tls --tls-cert cert.pem --tls-key key.pem \
+  https://services.odata.org/V2/Northwind/Northwind.svc/
 
-# IPv6 localhost  
-./odata-mcp --transport http --http-addr [::1]:8080 https://services.odata.org/V2/Northwind/Northwind.svc/
-
-# ⚠️ DANGEROUS: Expose to network (NOT RECOMMENDED!)
-# Only use if you understand the security implications
-./odata-mcp --transport http --http-addr 0.0.0.0:8080 --i-am-security-expert-i-know-what-i-am-doing https://services.odata.org/V2/Northwind/Northwind.svc/
+# All interfaces requires explicit flag + token + TLS
+./odata-mcp --transport http --http-addr 0.0.0.0:8080 \
+  --allow-all-interfaces --mcp-token "my-secret-token" \
+  --tls --tls-cert cert.pem --tls-key key.pem \
+  https://services.odata.org/V2/Northwind/Northwind.svc/
 ```
 
 Legacy HTTP/SSE endpoints:
@@ -562,6 +570,37 @@ Fine-grained control over which operation types are available. Operation types a
 
 Note: `--enable` and `--disable` cannot be used together.
 
+### Universal Tool Mode
+
+For large OData services with many entities, the standard per-entity tool generation can create hundreds of tools, causing:
+- **Context rot**: LLMs struggle to reason when tool count exceeds ~128
+- **High token usage**: Tool schemas can consume 15,000-40,000 tokens
+- **Tool selection failures**: LLMs may report "no API available"
+
+Universal mode solves this by generating a single tool that handles all operations:
+
+```bash
+# Enable universal tool mode
+./odata-mcp --universal https://my-service.com/odata/
+
+# Compare tool counts
+./odata-mcp --trace https://my-service.com/odata/           # Standard: many tools
+./odata-mcp --universal --trace https://my-service.com/odata/  # Universal: 1 tool
+```
+
+**When to use universal mode:**
+- Service has more than ~50 entity sets
+- Using multiple OData services simultaneously
+- Experiencing "no API available" errors with large services
+
+**Universal tool usage:**
+```json
+{"action": "list", "target": "Products", "params": {"filter": "Price gt 100", "top": 10}}
+{"action": "get", "target": "Products", "params": {"key": {"ProductID": 1}}}
+{"action": "create", "target": "Orders", "params": {"data": {"CustomerID": "C001"}}}
+{"action": "call", "target": "ReleaseOrder", "params": {"OrderID": "O001"}}
+```
+
 ### Debugging and Inspection
 
 ```bash
@@ -625,7 +664,12 @@ The OData MCP bridge includes a flexible hint system to provide guidance for ser
 | `--hint` | Direct hint JSON or text from CLI | |
 | `--transport` | Transport type: 'stdio', 'http' (SSE), or 'streamable-http' | `stdio` |
 | `--http-addr` | HTTP server address (with --transport http/streamable-http) | `localhost:8080` |
-| `--i-am-security-expert-i-know-what-i-am-doing` | DANGEROUS: Allow non-localhost HTTP transport | `false` |
+| `--mcp-token` | Authentication token for HTTP transport (required) | |
+| `--mcp-token-file` | Path to file containing authentication token | |
+| `--tls` | Enable TLS for HTTP transport | `false` |
+| `--tls-cert` | Path to TLS certificate file | |
+| `--tls-key` | Path to TLS key file | |
+| `--allow-all-interfaces` | Allow binding to 0.0.0.0/:: (requires --mcp-token and --tls) | `false` |
 | `--legacy-dates` | Enable legacy date format conversion | `true` |
 | `--no-legacy-dates` | Disable legacy date format conversion | `false` |
 | `--convert-dates-from-sap` | Convert SAP date formats in responses | `false` |
@@ -636,6 +680,7 @@ The OData MCP bridge includes a flexible hint system to provide guidance for ser
 | `--verbose-errors` | Provide detailed error context | `false` |
 | `--claude-code-friendly, -c` | Remove $ prefix from OData parameters for Claude Code CLI compatibility | `false` |
 | `--protocol-version` | Override MCP protocol version (e.g., '2025-06-18' for AI Foundry) | `2024-11-05` |
+| `--universal` | Use single universal OData tool instead of per-entity tools (reduces context for large services) | `false` |
 
 ### Environment Variables
 

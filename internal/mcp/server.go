@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"strings"
 	"sync"
@@ -50,7 +50,7 @@ type Server struct {
 // NewServer creates a new MCP server
 func NewServer(name, version string) *Server {
 	// Disable logging to avoid contaminating stdio communication
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
@@ -279,11 +279,10 @@ func (s *Server) handleInitializeV2(req *Request) (*transport.Message, error) {
 }
 
 // handleInitialized handles the initialized notification
-func (s *Server) handleInitialized(req *Request) error {
+func (s *Server) handleInitialized(req *Request) {
 	s.mu.Lock()
 	s.initialized = true
 	s.mu.Unlock()
-	return nil
 }
 
 // handleToolsListV2 handles the tools/list request for transport
