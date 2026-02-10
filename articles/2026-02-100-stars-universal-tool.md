@@ -49,6 +49,10 @@ Ironic, isn't it?
 
 ## The Solution: One Tool to Rule Them All
 
+Enter **Filipp Gnilyak** ([@vitalratel](https://github.com/vitalratel)).
+
+While I was still scratching my head about the context rot problem, Filipp opened [PR #26](https://github.com/oisee/odata_mcp_go/pull/26) with a solution so elegant I wondered why I hadn't thought of it myself:
+
 ```bash
 # Before: 485 tools, 37,000 tokens, Claude says "no"
 ./odata-mcp https://large-sap-service.com/odata/
@@ -58,6 +62,8 @@ Ironic, isn't it?
 ```
 
 One flag. That's it.
+
+But Filipp didn't stop there. His PR also fixed **10 open issues** in one sweep - GUID formatting, SAP namespace parsing, error handling, search capability detection, and more. The kind of contribution that transforms a project.
 
 **Universal Tool Mode** collapses your entire OData service into a single intelligent tool. Instead of `filter_Products`, `get_Orders`, `create_Customers`... you get one `odata` tool that understands:
 
@@ -170,10 +176,18 @@ But then:
 
 The SAP community especially embraced it. Turns out, a lot of folks were tired of clicking through Fiori tiles.
 
-Special shoutouts:
-- Everyone who filed detailed bug reports (you know who you are)
-- The brave souls who tested with production SAP systems
-- Holger Bruchelt for the podcast and beta testing
+### Special Shoutouts
+
+**Filipp Gnilyak** ([@vitalratel](https://github.com/vitalratel)) - The MVP of v1.6.0. His massive PR brought us universal tool mode and fixed 10 issues in one shot. This is what open source is about - someone sees a problem, builds the solution, and shares it with everyone. Filipp, you're a legend.
+
+**Louis-Philippe Perras** ([@lpperras](https://github.com/lpperras)) - Contributed MCP header forwarding for dynamic authentication. Real-world use case, clean implementation.
+
+**Holger Bruchelt** - For the podcast, beta testing, and being an early believer.
+
+And everyone who:
+- Filed detailed bug reports (you know who you are)
+- Tested with production SAP systems (brave souls)
+- Shared the project in their networks
 
 ---
 
